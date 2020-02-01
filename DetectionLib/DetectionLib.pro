@@ -13,14 +13,14 @@ QMAKE_CXXFLAGS += -std=c++11
 win32:QMAKE_CXXFLAGS += /bigobj
 
 SOURCES += \
-    primitivedetector.cpp \
-    planedetector.cpp \
-    planarpatch.cpp
+    cylinderdetector.cpp \
+    circledetector.cpp \
+    primitivedetector.cpp
 
 HEADERS += \
-    primitivedetector.h \
-    planedetector.h \
-    planarpatch.h
+    cylinderdetector.h \
+    circledetector.h \
+    primitivedetector.h
 unix {
     target.path = /usr/lib
     INSTALLS += target

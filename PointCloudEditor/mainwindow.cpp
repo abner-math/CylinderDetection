@@ -23,7 +23,7 @@ MainWindow::MainWindow(QWidget *parent)
     , mTranslateWorker(NULL)
     , mScaleWorker(NULL)
     , mRotateWorker(NULL)
-    , mPlaneDetectorWorker(NULL)
+    , mCylinderDetectorWorker(NULL)
     , mSelectState(DISABLED)
     , mCurrentComponent(std::numeric_limits<size_t>::max())
     , mProjectionPlane(NULL)
@@ -176,14 +176,9 @@ void MainWindow::initMenu()
     mViewMenu->addSeparator();
     mViewMenu->addAction("Options", this, &MainWindow::displayOptions);
 
-    mToolsMenu = new QMenu("Plane Detector");
+    mToolsMenu = new QMenu("Cylinder Detector");
 
-    QMenu *detectionMenu = mToolsMenu->addMenu("Detect planes");
-    detectionMenu->addAction("Autodetect planes", this, &MainWindow::detectPlanesDialog, QKeySequence(Qt::CTRL + Qt::SHIFT + Qt::Key_P));
-    detectionMenu->addSeparator();
-    detectionMenu->addAction("Expand region", this, &MainWindow::expandPlaneRegion, QKeySequence(Qt::SHIFT + Qt::Key_P));
-    detectionMenu->addAction("Detect plane", this, &MainWindow::detectPlane, QKeySequence(Qt::CTRL + Qt::Key_P));
-    detectionMenu->addAction("Merge planes", this, &MainWindow::mergePlanes, QKeySequence(Qt::CTRL + Qt::ALT + Qt::Key_P));
+    mToolsMenu->addAction("Detect cylinders", this, &MainWindow::detectCylinders, QKeySequence(Qt::CTRL + Qt::SHIFT + Qt::Key_C));
 
     QMenu *normalsMenu = mToolsMenu->addMenu("Estimate normals");
     normalsMenu->addAction("Slow", this, &MainWindow::estimateNormalsSlow);
@@ -269,11 +264,10 @@ void MainWindow::initSceneObjects()
     connect(mRotateWorker, SIGNAL(workerProgress(float)), this, SLOT(workerProgress(float)));
     connect(mRotateWorker, SIGNAL(workerStatus(const QString&)), this, SLOT(workerStatus(const QString&)));
     connect(mRotateWorker, SIGNAL(workerFinish()), this, SLOT(rotateFinish()));
-    mPlaneDetectorWorker = new PlaneDetectorWorker(NULL);
-    connect(mPlaneDetectorWorker, SIGNAL(workerProgress(float)), this, SLOT(workerProgress(float)));
-    connect(mPlaneDetectorWorker, SIGNAL(workerStatus(const QString&)), this, SLOT(workerStatus(const QString&)));
-    connect(mPlaneDetectorWorker, SIGNAL(workerFinish()), this, SLOT(planeDetectionFinish()));
-    connect(&mPlaneDetectorDialog, SIGNAL(detectPlaneOptions(float, float, float)), this, SLOT(detectPlanes(float, float, float)));
+    mCylinderDetectorWorker = new CylinderDetectorWorker(NULL);
+    connect(mCylinderDetectorWorker, SIGNAL(workerProgress(float)), this, SLOT(workerProgress(float)));
+    connect(mCylinderDetectorWorker, SIGNAL(workerStatus(const QString&)), this, SLOT(workerStatus(const QString&)));
+    connect(mCylinderDetectorWorker, SIGNAL(workerFinish()), this, SLOT(cylinderDetectionFinish()));
 }
 
 void MainWindow::clearPointCloud()
@@ -317,7 +311,7 @@ void MainWindow::updatePointCloud()
     mTranslateWorker->pointCloud(mPointCloud, mSimplifiedPointCloud);
     mScaleWorker->pointCloud(mPointCloud, mSimplifiedPointCloud);
     mRotateWorker->pointCloud(mPointCloud, mSimplifiedPointCloud);
-    mPlaneDetectorWorker->pointCloud(mPointCloud);
+    mCylinderDetectorWorker->pointCloud(mPointCloud);
 
     // update widgets
     mTranslateDialog.setPointCloud(mPointCloud);
@@ -988,21 +982,6 @@ void MainWindow::editRemoveFromPrimitives()
                 removed[i] = true;
             }
         }
-        PlaneDetector *planeDetector = new PlaneDetector(mPointCloud);
-        for (size_t i = 0; i < mPointCloud->geometry()->numPlanes(); i++)
-        {
-            Plane *plane = mPointCloud->geometry()->plane(i);
-            std::vector<size_t> inliers = plane->inliers();
-            inliers.erase(std::remove_if(inliers.begin(), inliers.end(), [&](const size_t &inlier) {
-                return removed[inlier];
-            }), inliers.end());
-            if (plane->inliers().size() > inliers.size())
-            {
-                plane->inliers(inliers);
-                planeDetector->delimitPlane(plane);
-            }
-        }
-        delete planeDetector;
         for (size_t i = 0; i < mPointCloud->geometry()->numCylinders(); i++)
         {
             Cylinder *cylinder = mPointCloud->geometry()->cylinder(i);
@@ -1544,26 +1523,7 @@ void MainWindow::normalEstimationFinish()
     workerFinish();
 }
 
-void MainWindow::detectPlanes(float minNormal, float maxDist, float outlierRatio)
-{
-    clearPlanes();
-    mPlaneDetectorWorker->detectorParams(minNormal, maxDist, outlierRatio);
-    mPlaneDetectorWorker->mode(PlaneDetectorWorker::Mode::AUTODETECT);
-    workerStart(mPlaneDetectorWorker);
-}
-
-void MainWindow::detectPlanesDialog()
-{
-    /*if (!mPointCloud->hasConnectivity())
-    {
-        QMessageBox messageBox;
-        messageBox.critical(this, "Error", "Point cloud has no connectivity.");
-        return;
-    }*/
-    mPlaneDetectorDialog.show();
-}
-
-void MainWindow::detectPlane()
+void MainWindow::detectCylinders()
 {
     if (!mPointCloud->hasConnectivity())
     {
@@ -1571,115 +1531,25 @@ void MainWindow::detectPlane()
         messageBox.critical(this, "Error", "Point cloud has no connectivity.");
         return;
     }
-    if (mSelectFilter->mode() == SelectFilter::SelectMode::POINT && mSelectFilter->isAnySelected())
-    {
-        std::vector<size_t> points;
-        for (size_t i = 0; i < mPointCloud->size(); i++)
-        {
-            if (mSelectFilter->isSelected(i))
-            {
-                points.push_back(i);
-            }
-        }
-        mPlaneDetectorWorker->mode(PlaneDetectorWorker::Mode::DETECT_REGION);
-        mPlaneDetectorWorker->region(points);
-        workerStart(mPlaneDetectorWorker);
-    }
+    clearCylinders();
+    workerStart(mCylinderDetectorWorker);
 }
 
-void MainWindow::mergePlanes()
-{
-    if (!mPointCloud->hasConnectivity())
-    {
-        QMessageBox messageBox;
-        messageBox.critical(this, "Error", "Point cloud has no connectivity.");
-        return;
-    }
-    if (mSelectFilter->mode() == SelectFilter::SelectMode::PLANE && mSelectFilter->isAnySelected())
-    {
-        std::vector<size_t> points;
-        for (int i = mPointCloud->geometry()->numPlanes() - 1; i >= 0; i--)
-        {
-            if (mSelectFilter->isSelected(i))
-            {
-                const Plane *plane = mPointCloud->geometry()->plane(i);
-                points.insert(points.end(), plane->inliers().begin(), plane->inliers().end());
-                mPointCloud->geometry()->removePlane(i);
-            }
-        }
-        mPlaneDetectorWorker->mode(PlaneDetectorWorker::Mode::DETECT_REGION);
-        mPlaneDetectorWorker->region(points);
-        workerStart(mPlaneDetectorWorker);
-    }
-}
-
-void MainWindow::expandPlaneRegion()
-{
-    if (!mPointCloud->hasConnectivity())
-    {
-        QMessageBox messageBox;
-        messageBox.critical(this, "Error", "Point cloud has no connectivity.");
-        return;
-    }
-    if (mSelectFilter->mode() == SelectFilter::SelectMode::POINT && mSelectFilter->isAnySelected())
-    {
-        std::vector<size_t> points;
-        for (size_t i = 0; i < mPointCloud->size(); i++)
-        {
-            if (mSelectFilter->isSelected(i))
-            {
-                points.push_back(i);
-            }
-        }
-        mPlaneDetectorWorker->mode(PlaneDetectorWorker::Mode::EXPAND_REGION);
-        mPlaneDetectorWorker->region(points);
-        workerStart(mPlaneDetectorWorker);
-    }
-}
-
-void MainWindow::planeDetectionFinish()
+void MainWindow::cylinderDetectionFinish()
 {
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    statusBar()->showMessage(("Done in " + std::to_string(mPlaneDetectorWorker->timeElapsedInSec()) + "s.").c_str());
-    //addState();
-    switch (mPlaneDetectorWorker->mode())
+    statusBar()->showMessage(("Done in " + std::to_string(mCylinderDetectorWorker->timeElapsedInSec()) + "s.").c_str());
+    std::cout << "Done in " + std::to_string(mCylinderDetectorWorker->timeElapsedInSec()) + "s." << std::endl;
+    statusBar()->showMessage(("Done in " + std::to_string(mCylinderDetectorWorker->timeElapsedInSec()) + "s. Number of cylinders: " + std::to_string(mCylinderDetectorWorker->cylinders().size()) + ".").c_str());
+    mPointCloud->geometry()->clearCylinders();
+    for (Cylinder *cylinder : mCylinderDetectorWorker->cylinders())
     {
-    case PlaneDetectorWorker::Mode::AUTODETECT:
-        std::cout << "Done in " + std::to_string(mPlaneDetectorWorker->timeElapsedInSec()) + "s." << std::endl;
-        statusBar()->showMessage(("Done in " + std::to_string(mPlaneDetectorWorker->timeElapsedInSec()) + "s. Number of planes: " + std::to_string(mPlaneDetectorWorker->planes().size()) + ".").c_str());
-        mPointCloud->geometry()->clearPlanes();
-        for (Plane *plane : mPlaneDetectorWorker->planes())
-        {
-            plane->color(ColorUtils::colorWheel(rand() % 360));
-            mPlaneDetectorWorker->detector()->delimitPlane(plane);
-            mPointCloud->geometry()->addPlane(plane);
-        }
-        mPlaneDrawer->update();
-        mPointCloudDrawer->update();
-        mSceneWidget->update();
-        break;
-    case PlaneDetectorWorker::Mode::EXPAND_REGION:
-        mSelectFilter->clearSelection();
-        for (const size_t &point : mPlaneDetectorWorker->region())
-        {
-            mSelectFilter->select(point);
-        }
-        mPointCloudDrawer->update();
-        mSceneWidget->update();
-        break;
-    case PlaneDetectorWorker::Mode::DETECT_REGION:
-        Plane *plane = mPlaneDetectorWorker->planes()[0];
-        if (plane != NULL)
-        {
-            mSelectFilter->clearSelection();
-            plane->color(ColorUtils::colorWheel(rand() %  360));
-            mPointCloud->geometry()->addPlane(plane);
-            mPlaneDrawer->update();
-            mPointCloudDrawer->update();
-            mSceneWidget->update();
-        }
-        break;
+        cylinder->color(ColorUtils::colorWheel(rand() % 360));
+        mPointCloud->geometry()->addCylinder(cylinder);
     }
+    mCylinderDrawer->update();
+    mPointCloudDrawer->update();
+    mSceneWidget->update();
     mSelectFilter->update(mPointCloud->size(), mPointCloud->geometry()->numPlanes(), mPointCloud->geometry()->numCylinders(), mPointCloud->geometry()->numConnections());
     workerFinish();
     QApplication::setOverrideCursor(Qt::ArrowCursor);

@@ -34,8 +34,7 @@ SOURCES += main.cpp\
     cylinderdrawer.cpp \
     selectfilter.cpp \
     pointcloudioworker.cpp \
-    planedetectorworker.cpp \
-    planedetectordialog.cpp
+    cylinderdetectorworker.cpp
 
 HEADERS  += mainwindow.h \
     normaldrawer.h \
@@ -57,8 +56,7 @@ HEADERS  += mainwindow.h \
     cylinderdrawer.h \
     selectfilter.h \
     pointcloudioworker.h \
-    planedetectorworker.h \
-    planedetectordialog.h
+    cylinderdetectorworker.h
 
 RESOURCES += \
     resources.qrc

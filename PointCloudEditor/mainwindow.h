@@ -9,8 +9,7 @@
 #include "pointclouddrawer.h"
 #include "pointcloudioworker.h"
 #include "planedrawer.h"
-#include "planedetectordialog.h"
-#include "planedetectorworker.h"
+#include "cylinderdetectorworker.h"
 #include "cylinderdrawer.h"
 #include "boundingboxdrawer.h"
 #include "selectfilter.h"
@@ -88,12 +87,8 @@ private slots:
     void estimateNormalsQuick();
     void normalEstimationFinish();
 
-    void detectPlanes(float minNormal, float maxDist, float outlierRatio);
-    void detectPlanesDialog();
-    void detectPlane();
-    void expandPlaneRegion();
-    void mergePlanes();
-    void planeDetectionFinish();
+    void detectCylinders();
+    void cylinderDetectionFinish();
 
     void pointCloudInfo();
     void workerStop();
@@ -121,7 +116,7 @@ private:
     TransformTranslateWorker *mTranslateWorker;
     TransformScaleWorker *mScaleWorker;
     TransformRotateWorker *mRotateWorker;
-    PlaneDetectorWorker *mPlaneDetectorWorker;
+    CylinderDetectorWorker *mCylinderDetectorWorker;
 
     QMenu *mFileMenu;
     QAction *mOpenPointCloudMenu;
@@ -160,7 +155,6 @@ private:
     SceneWidget *mGaussianMapWidget;
     GaussianMapDrawer *mGaussianMapDrawer;
 
-    PlaneDetectorDialog mPlaneDetectorDialog;
     TransformTranslateDialog mTranslateDialog;
     TransformScaleDialog mScaleDialog;
     TransformRotateDialog mRotateDialog;
