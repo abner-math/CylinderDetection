@@ -24,6 +24,12 @@ The actual article implementation is located here:
 
 `DetectionLib/cylinderdetector.cpp`
 
+### Graphical Interface 
+
+#### !! Important !!
+
+**Before estimating a plane (On Plane Detector > Detect planes), you need to estimate normals first (Plane Detector > Estimate normals).**
+
 ## Project structure
 
 Basically, this project is structured in four main subprojects:
